@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -20,43 +21,68 @@ import {
   MessageCircle,
   Lock,
   Unlock,
+  ImageIcon,
+  Save,
+  Eye,
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import Image from "next/image"
+import { getCurrentUser } from "@/app/actions/auth-actions"
+import { getUserLinks, addLink, updateUserLink, deleteUserLink, updateLinkPositions } from "@/app/actions/link-actions"
+import { getUserProfile, updateUserProfile, uploadUserProfileImage } from "@/app/actions/profile-actions"
+import type { User } from "@/lib/auth"
+import type { Link as LinkType } from "@/lib/links"
+import type { Profile } from "@/lib/profiles"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { DashboardShell } from "@/components/dashboard-shell"
+import { DashboardHeader } from "@/components/dashboard-header"
 
 export default function EditorPage() {
-  const [links, setLinks] = useState([
-    {
-      id: "1",
-      title: "My Website",
-      url: "https://example.com",
-      type: "website",
-      isPublic: true,
-    },
-    {
-      id: "2",
-      title: "Instagram",
-      url: "https://instagram.com/username",
-      type: "instagram",
-      isPublic: true,
-    },
-    {
-      id: "3",
-      title: "WhatsApp Community",
-      url: "https://whatsapp.com/group/link",
-      type: "whatsapp",
-      isPublic: true,
-    },
-  ])
+  const router = useRouter()
+  const [user, setUser] = useState<User | null>(null)
+  const [links, setLinks] = useState<LinkType[]>([])
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
-  const [profile, setProfile] = useState({
-    username: "johndoe",
-    displayName: "John Doe",
-    bio: "Digital Creator & Influencer",
-    theme: "default",
-  })
+  useEffect(() => {
+    async function loadData() {
+      try {
+        // Get current user
+        const userData = await getCurrentUser()
+        if (!userData) {
+          router.push("/login")
+          return
+        }
+        setUser(userData)
+
+        // Get user links
+        const linksResult = await getUserLinks()
+        if (linksResult.success) {
+          setLinks(linksResult.links.sort((a, b) => a.position - b.position))
+        }
+
+        // Get user profile
+        const profileResult = await getUserProfile(userData.username)
+        if (profileResult.success) {
+          setProfile(profileResult.profile)
+        }
+      } catch (err) {
+        console.error("Error loading editor data:", err)
+        setError("Failed to load editor data. Please try again.")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadData()
+  }, [router])
 
   const handleDragEnd = (result) => {
     if (!result.destination) return
@@ -65,30 +91,159 @@ export default function EditorPage() {
     const [reorderedItem] = items.splice(result.source.index, 1)
     items.splice(result.destination.index, 0, reorderedItem)
 
-    setLinks(items)
+    // Update positions
+    const updatedItems = items.map((item, index) => ({
+      ...item,
+      position: index,
+    }))
+
+    setLinks(updatedItems)
+
+    // Save new positions to database
+    updateLinkPositions(updatedItems.map((item) => ({ id: item.id, position: item.position }))).catch((err) => {
+      console.error("Error updating link positions:", err)
+      setError("Failed to update link positions")
+    })
   }
 
-  const addLink = () => {
-    const newLink = {
-      id: Date.now().toString(),
-      title: "New Link",
-      url: "",
-      type: "website",
-      isPublic: true,
+  const handleAddLink = async (e) => {
+    e.preventDefault()
+
+    const formData = new FormData()
+    formData.append("title", "New Link")
+    formData.append("url", "https://")
+    formData.append("type", "website")
+    formData.append("isPublic", "true")
+
+    try {
+      setIsSaving(true)
+      const result = await addLink(formData)
+
+      if (result.error) {
+        setError(result.error)
+      } else {
+        setLinks([...links, result.link])
+        setSuccess("Link added successfully")
+      }
+    } catch (err) {
+      console.error("Error adding link:", err)
+      setError("Failed to add link")
+    } finally {
+      setIsSaving(false)
     }
-    setLinks([...links, newLink])
   }
 
-  const removeLink = (id) => {
-    setLinks(links.filter((link) => link.id !== id))
+  const handleUpdateLink = async (link: LinkType, field: string, value: any) => {
+    const updatedLink = { ...link, [field]: value }
+
+    // Update link in state
+    setLinks(links.map((l) => (l.id === link.id ? updatedLink : l)))
+
+    // Save to database
+    const formData = new FormData()
+    formData.append("id", link.id)
+    formData.append("title", updatedLink.title)
+    formData.append("url", updatedLink.url)
+    formData.append("type", updatedLink.type)
+    formData.append("isPublic", updatedLink.isPublic.toString())
+
+    try {
+      const result = await updateUserLink(formData)
+
+      if (result.error) {
+        setError(result.error)
+        // Revert changes if update failed
+        setLinks(links)
+      }
+    } catch (err) {
+      console.error("Error updating link:", err)
+      setError("Failed to update link")
+      // Revert changes if update failed
+      setLinks(links)
+    }
   }
 
-  const updateLink = (id, field, value) => {
-    setLinks(links.map((link) => (link.id === id ? { ...link, [field]: value } : link)))
+  const handleDeleteLink = async (linkId: string) => {
+    try {
+      setIsSaving(true)
+
+      const formData = new FormData()
+      formData.append("id", linkId)
+
+      const result = await deleteUserLink(formData)
+
+      if (result.error) {
+        setError(result.error)
+      } else {
+        setLinks(links.filter((link) => link.id !== linkId))
+        setSuccess("Link deleted successfully")
+      }
+    } catch (err) {
+      console.error("Error deleting link:", err)
+      setError("Failed to delete link")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const toggleLinkVisibility = (id) => {
-    setLinks(links.map((link) => (link.id === id ? { ...link, isPublic: !link.isPublic } : link)))
+  const handleToggleLinkVisibility = (link: LinkType) => {
+    handleUpdateLink(link, "isPublic", !link.isPublic)
+  }
+
+  const handleProfileUpdate = async (e) => {
+    e.preventDefault()
+
+    if (!profile) return
+
+    const form = e.target
+    const formData = new FormData(form)
+
+    try {
+      setIsSaving(true)
+
+      // First upload image if there is one
+      if (imageFile) {
+        const imageFormData = new FormData()
+        imageFormData.append("image", imageFile)
+
+        const imageResult = await uploadUserProfileImage(imageFormData)
+
+        if (imageResult.error) {
+          setError(imageResult.error)
+          setIsSaving(false)
+          return
+        }
+      }
+
+      // Then update profile
+      const result = await updateUserProfile(formData)
+
+      if (result.error) {
+        setError(result.error)
+      } else {
+        setProfile(result.profile)
+        setSuccess("Profile updated successfully")
+      }
+    } catch (err) {
+      console.error("Error updating profile:", err)
+      setError("Failed to update profile")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      setImageFile(file)
+
+      // Create preview
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
   }
 
   const getLinkIcon = (type) => {
@@ -106,16 +261,43 @@ export default function EditorPage() {
     }
   }
 
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Edit Your Profile</h1>
-        <Button asChild>
-          <Link href="/dashboard">Back to Dashboard</Link>
-        </Button>
-      </div>
+  if (isLoading) {
+    return (
+      <DashboardShell>
+        <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold">Loading editor...</h2>
+            <p className="text-muted-foreground">Please wait while we load your data</p>
+          </div>
+        </div>
+      </DashboardShell>
+    )
+  }
 
-      <div className="grid gap-8 md:grid-cols-[1fr_300px]">
+  return (
+    <DashboardShell>
+      <DashboardHeader heading="Edit Your Profile" text="Customize your profile and manage your links.">
+        <Button asChild variant="outline">
+          <Link href={`/profile/${user?.username}`} target="_blank">
+            <Eye className="mr-2 h-4 w-4" />
+            View Profile
+          </Link>
+        </Button>
+      </DashboardHeader>
+
+      {error && (
+        <Alert variant="destructive" className="my-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {success && (
+        <Alert className="my-4 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-900">
+          <AlertDescription className="text-green-800 dark:text-green-300">{success}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid gap-8 md:grid-cols-[1fr_300px] mt-6">
         <div className="space-y-6">
           <Tabs defaultValue="links">
             <TabsList className="grid w-full grid-cols-2">
@@ -126,7 +308,7 @@ export default function EditorPage() {
             <TabsContent value="links" className="space-y-4">
               <div className="flex justify-between">
                 <h2 className="text-xl font-bold">Your Links</h2>
-                <Button onClick={addLink}>
+                <Button onClick={handleAddLink} disabled={isSaving}>
                   <Plus className="mr-2 h-4 w-4" /> Add Link
                 </Button>
               </div>
@@ -135,79 +317,103 @@ export default function EditorPage() {
                 <Droppable droppableId="links">
                   {(provided) => (
                     <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-4">
-                      {links.map((link, index) => (
-                        <Draggable key={link.id} draggableId={link.id} index={index}>
-                          {(provided) => (
-                            <Card ref={provided.innerRef} {...provided.draggableProps} className="border">
-                              <CardContent className="p-4">
-                                <div className="flex items-center justify-between">
-                                  <div {...provided.dragHandleProps} className="flex items-center space-x-2">
-                                    <div className="flex flex-col">
-                                      <ArrowUp className="h-4 w-4" />
-                                      <ArrowDown className="h-4 w-4" />
+                      {links.length === 0 ? (
+                        <Card>
+                          <CardContent className="flex flex-col items-center justify-center py-10">
+                            <Globe className="h-10 w-10 text-muted-foreground mb-4" />
+                            <h3 className="text-lg font-medium">No links yet</h3>
+                            <p className="text-sm text-muted-foreground mb-4">
+                              Add your first link to start building your profile
+                            </p>
+                            <Button onClick={handleAddLink} disabled={isSaving}>
+                              <Plus className="mr-2 h-4 w-4" /> Add Link
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        links.map((link, index) => (
+                          <Draggable key={link.id} draggableId={link.id} index={index}>
+                            {(provided) => (
+                              <Card ref={provided.innerRef} {...provided.draggableProps} className="border">
+                                <CardContent className="p-4">
+                                  <div className="flex items-center justify-between">
+                                    <div {...provided.dragHandleProps} className="flex items-center space-x-2">
+                                      <div className="flex flex-col">
+                                        <ArrowUp className="h-4 w-4" />
+                                        <ArrowDown className="h-4 w-4" />
+                                      </div>
+                                      {getLinkIcon(link.type)}
                                     </div>
-                                    {getLinkIcon(link.type)}
+                                    <div className="flex items-center space-x-2">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleToggleLinkVisibility(link)}
+                                      >
+                                        {link.isPublic ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleDeleteLink(link.id)}
+                                        disabled={isSaving}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
                                   </div>
-                                  <div className="flex items-center space-x-2">
-                                    <Button variant="ghost" size="icon" onClick={() => toggleLinkVisibility(link.id)}>
-                                      {link.isPublic ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                                    </Button>
-                                    <Button variant="ghost" size="icon" onClick={() => removeLink(link.id)}>
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
+                                  <div className="mt-4 space-y-4">
+                                    <div className="space-y-2">
+                                      <Label htmlFor={`title-${link.id}`}>Title</Label>
+                                      <Input
+                                        id={`title-${link.id}`}
+                                        value={link.title}
+                                        onChange={(e) => handleUpdateLink(link, "title", e.target.value)}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor={`url-${link.id}`}>URL</Label>
+                                      <Input
+                                        id={`url-${link.id}`}
+                                        value={link.url}
+                                        onChange={(e) => handleUpdateLink(link, "url", e.target.value)}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor={`type-${link.id}`}>Link Type</Label>
+                                      <Select
+                                        value={link.type}
+                                        onValueChange={(value) => handleUpdateLink(link, "type", value)}
+                                      >
+                                        <SelectTrigger id={`type-${link.id}`}>
+                                          <SelectValue placeholder="Select link type" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="website">Website</SelectItem>
+                                          <SelectItem value="instagram">Instagram</SelectItem>
+                                          <SelectItem value="youtube">YouTube</SelectItem>
+                                          <SelectItem value="linkedin">LinkedIn</SelectItem>
+                                          <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <Switch
+                                        id={`visibility-${link.id}`}
+                                        checked={link.isPublic}
+                                        onCheckedChange={() => handleToggleLinkVisibility(link)}
+                                      />
+                                      <Label htmlFor={`visibility-${link.id}`}>
+                                        {link.isPublic ? "Public" : "Premium (Subscribers Only)"}
+                                      </Label>
+                                    </div>
                                   </div>
-                                </div>
-                                <div className="mt-4 space-y-4">
-                                  <div className="space-y-2">
-                                    <Label htmlFor={`title-${link.id}`}>Title</Label>
-                                    <Input
-                                      id={`title-${link.id}`}
-                                      value={link.title}
-                                      onChange={(e) => updateLink(link.id, "title", e.target.value)}
-                                    />
-                                  </div>
-                                  <div className="space-y-2">
-                                    <Label htmlFor={`url-${link.id}`}>URL</Label>
-                                    <Input
-                                      id={`url-${link.id}`}
-                                      value={link.url}
-                                      onChange={(e) => updateLink(link.id, "url", e.target.value)}
-                                    />
-                                  </div>
-                                  <div className="space-y-2">
-                                    <Label htmlFor={`type-${link.id}`}>Link Type</Label>
-                                    <Select
-                                      value={link.type}
-                                      onValueChange={(value) => updateLink(link.id, "type", value)}
-                                    >
-                                      <SelectTrigger id={`type-${link.id}`}>
-                                        <SelectValue placeholder="Select link type" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="website">Website</SelectItem>
-                                        <SelectItem value="instagram">Instagram</SelectItem>
-                                        <SelectItem value="youtube">YouTube</SelectItem>
-                                        <SelectItem value="linkedin">LinkedIn</SelectItem>
-                                        <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <Switch
-                                      id={`visibility-${link.id}`}
-                                      checked={link.isPublic}
-                                      onCheckedChange={() => toggleLinkVisibility(link.id)}
-                                    />
-                                    <Label htmlFor={`visibility-${link.id}`}>
-                                      {link.isPublic ? "Public" : "Premium (Subscribers Only)"}
-                                    </Label>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          )}
-                        </Draggable>
-                      ))}
+                                </CardContent>
+                              </Card>
+                            )}
+                          </Draggable>
+                        ))
+                      )}
                       {provided.placeholder}
                     </div>
                   )}
@@ -216,75 +422,122 @@ export default function EditorPage() {
             </TabsContent>
 
             <TabsContent value="appearance" className="space-y-6">
-              <div className="space-y-4">
-                <h2 className="text-xl font-bold">Profile Information</h2>
+              <form onSubmit={handleProfileUpdate}>
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="username">Username</Label>
-                    <Input
-                      id="username"
-                      value={profile.username}
-                      onChange={(e) => setProfile({ ...profile, username: e.target.value })}
-                    />
+                  <h2 className="text-xl font-bold">Profile Information</h2>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="displayName">Display Name</Label>
+                      <Input
+                        id="displayName"
+                        name="displayName"
+                        defaultValue={profile?.displayName || user?.username}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bio">Bio</Label>
+                      <Textarea id="bio" name="bio" defaultValue={profile?.bio || ""} className="resize-none" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="profileImage">Profile Image</Label>
+                      <div className="flex items-center space-x-4">
+                        <div className="h-16 w-16 overflow-hidden rounded-full border">
+                          <Image
+                            src={imagePreview || profile?.profileImage || "/placeholder.svg?height=64&width=64"}
+                            width={64}
+                            height={64}
+                            alt="Profile"
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                        <Label
+                          htmlFor="image-upload"
+                          className="cursor-pointer flex items-center justify-center rounded-md border border-dashed px-3 py-2 text-sm"
+                        >
+                          <ImageIcon className="mr-2 h-4 w-4" />
+                          Upload Image
+                          <input
+                            id="image-upload"
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={handleImageChange}
+                          />
+                        </Label>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="displayName">Display Name</Label>
-                    <Input
-                      id="displayName"
-                      value={profile.displayName}
-                      onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="bio">Bio</Label>
-                    <Textarea
-                      id="bio"
-                      value={profile.bio}
-                      onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
-                      className="resize-none"
-                    />
-                  </div>
-                </div>
-              </div>
 
-              <div className="space-y-4">
-                <h2 className="text-xl font-bold">Theme</h2>
-                <div className="grid grid-cols-3 gap-4">
-                  <div
-                    className={`cursor-pointer rounded-md border p-4 ${
-                      profile.theme === "default" ? "border-primary" : ""
-                    }`}
-                    onClick={() => setProfile({ ...profile, theme: "default" })}
-                  >
-                    <div className="h-20 rounded bg-white"></div>
-                    <p className="mt-2 text-center text-sm">Default</p>
+                  <div className="space-y-4">
+                    <h2 className="text-xl font-bold">Theme</h2>
+                    <div className="space-y-2">
+                      <Label htmlFor="theme">Profile Theme</Label>
+                      <Select name="theme" defaultValue={profile?.theme || "default"}>
+                        <SelectTrigger id="theme">
+                          <SelectValue placeholder="Select theme" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">Default</SelectItem>
+                          <SelectItem value="dark">Dark</SelectItem>
+                          <SelectItem value="gradient">Gradient</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="cursor-pointer rounded-md border p-4">
+                        <div className="h-20 rounded bg-white"></div>
+                        <p className="mt-2 text-center text-sm">Default</p>
+                      </div>
+                      <div className="cursor-pointer rounded-md border p-4">
+                        <div className="h-20 rounded bg-gray-900"></div>
+                        <p className="mt-2 text-center text-sm">Dark</p>
+                      </div>
+                      <div className="cursor-pointer rounded-md border p-4">
+                        <div className="h-20 rounded bg-gradient-to-r from-purple-500 to-pink-500"></div>
+                        <p className="mt-2 text-center text-sm">Gradient</p>
+                      </div>
+                    </div>
                   </div>
-                  <div
-                    className={`cursor-pointer rounded-md border p-4 ${
-                      profile.theme === "dark" ? "border-primary" : ""
-                    }`}
-                    onClick={() => setProfile({ ...profile, theme: "dark" })}
-                  >
-                    <div className="h-20 rounded bg-gray-900"></div>
-                    <p className="mt-2 text-center text-sm">Dark</p>
+
+                  <div className="space-y-4">
+                    <h2 className="text-xl font-bold">Customization</h2>
+                    <div className="space-y-2">
+                      <Label htmlFor="buttonStyle">Button Style</Label>
+                      <Select name="buttonStyle" defaultValue={profile?.customization?.buttonStyle || "default"}>
+                        <SelectTrigger id="buttonStyle">
+                          <SelectValue placeholder="Select button style" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">Default</SelectItem>
+                          <SelectItem value="rounded">Rounded</SelectItem>
+                          <SelectItem value="pill">Pill</SelectItem>
+                          <SelectItem value="shadow">Shadow</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="fontFamily">Font</Label>
+                      <Select name="fontFamily" defaultValue={profile?.customization?.fontFamily || "default"}>
+                        <SelectTrigger id="fontFamily">
+                          <SelectValue placeholder="Select font" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">Default</SelectItem>
+                          <SelectItem value="serif">Serif</SelectItem>
+                          <SelectItem value="mono">Monospace</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div
-                    className={`cursor-pointer rounded-md border p-4 ${
-                      profile.theme === "gradient" ? "border-primary" : ""
-                    }`}
-                    onClick={() => setProfile({ ...profile, theme: "gradient" })}
-                  >
-                    <div className="h-20 rounded bg-gradient-to-r from-purple-500 to-pink-500"></div>
-                    <p className="mt-2 text-center text-sm">Gradient</p>
-                  </div>
+
+                  <Button type="submit" className="w-full" disabled={isSaving}>
+                    <Save className="mr-2 h-4 w-4" />
+                    {isSaving ? "Saving..." : "Save Changes"}
+                  </Button>
                 </div>
-              </div>
+              </form>
             </TabsContent>
           </Tabs>
-
-          <div className="flex justify-end">
-            <Button>Save Changes</Button>
-          </div>
         </div>
 
         <div className="sticky top-4 self-start">
@@ -292,9 +545,9 @@ export default function EditorPage() {
           <div className="relative h-[600px] w-[300px] overflow-hidden rounded-[40px] border-[8px] border-gray-900 bg-gray-900 shadow-xl">
             <div
               className={`absolute inset-0 overflow-auto ${
-                profile.theme === "dark"
+                profile?.theme === "dark"
                   ? "bg-gray-900 text-white"
-                  : profile.theme === "gradient"
+                  : profile?.theme === "gradient"
                     ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                     : "bg-white"
               }`}
@@ -302,47 +555,54 @@ export default function EditorPage() {
               <div className="flex flex-col items-center p-6 pt-10 text-center">
                 <div className="h-24 w-24 overflow-hidden rounded-full border-4 border-primary">
                   <Image
-                    src="/placeholder.svg?height=96&width=96"
+                    src={imagePreview || profile?.profileImage || "/placeholder.svg?height=96&width=96"}
                     width={96}
                     height={96}
                     alt="Profile"
                     className="h-full w-full object-cover"
                   />
                 </div>
-                <h3 className="mt-4 text-xl font-bold">@{profile.username}</h3>
-                <p className={`text-sm ${profile.theme === "default" ? "text-gray-500" : "text-gray-200"}`}>
-                  {profile.bio}
+                <h3 className="mt-4 text-xl font-bold">@{user?.username}</h3>
+                <p className={`text-sm ${profile?.theme === "default" ? "text-gray-500" : "text-gray-200"}`}>
+                  {profile?.bio || "Your bio here"}
                 </p>
                 <div className="mt-6 grid w-full gap-4">
-                  {links.map((link) => (
-                    <div key={link.id}>
-                      {link.isPublic ? (
-                        <div
-                          className={`flex items-center justify-center rounded-md p-3 font-medium ${getLinkStyle(
-                            link.type,
-                            profile.theme,
-                          )}`}
-                        >
-                          {link.title}
+                  {links.length === 0 ? (
+                    <div className="text-center text-sm text-muted-foreground">Add links to see them here</div>
+                  ) : (
+                    links
+                      .sort((a, b) => a.position - b.position)
+                      .map((link) => (
+                        <div key={link.id}>
+                          {link.isPublic ? (
+                            <div
+                              className={`flex items-center justify-center rounded-md p-3 font-medium ${getLinkStyle(
+                                link.type,
+                                profile?.theme || "default",
+                                profile?.customization?.buttonStyle || "default",
+                              )}`}
+                            >
+                              {link.title}
+                            </div>
+                          ) : (
+                            <div
+                              className={`flex items-center justify-center rounded-md ${
+                                profile?.theme === "default" ? "bg-gray-100" : "bg-gray-800"
+                              } p-3 font-medium`}
+                            >
+                              <span className={profile?.theme === "default" ? "text-gray-500" : "text-gray-400"}>
+                                {link.title}
+                              </span>
+                              <Lock
+                                className={`ml-2 h-4 w-4 ${
+                                  profile?.theme === "default" ? "text-gray-500" : "text-gray-400"
+                                }`}
+                              />
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div
-                          className={`flex items-center justify-center rounded-md ${
-                            profile.theme === "default" ? "bg-gray-100" : "bg-gray-800"
-                          } p-3 font-medium`}
-                        >
-                          <span className={profile.theme === "default" ? "text-gray-500" : "text-gray-400"}>
-                            {link.title}
-                          </span>
-                          <Lock
-                            className={`ml-2 h-4 w-4 ${
-                              profile.theme === "default" ? "text-gray-500" : "text-gray-400"
-                            }`}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                      ))
+                  )}
                 </div>
               </div>
             </div>
@@ -350,55 +610,72 @@ export default function EditorPage() {
           </div>
         </div>
       </div>
-    </div>
+    </DashboardShell>
   )
 }
 
-function getLinkStyle(type: string, theme: string): string {
+function getLinkStyle(type: string, theme: string, buttonStyle: string): string {
+  let baseStyle = ""
+
+  // Button style
+  switch (buttonStyle) {
+    case "rounded":
+      baseStyle = "rounded-md "
+      break
+    case "pill":
+      baseStyle = "rounded-full "
+      break
+    case "shadow":
+      baseStyle = "rounded-md shadow-lg "
+      break
+    default:
+      baseStyle = "rounded-md "
+  }
+
   if (theme === "dark") {
     switch (type) {
       case "instagram":
-        return "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+        return baseStyle + "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
       case "website":
-        return "bg-blue-600 text-white"
+        return baseStyle + "bg-blue-600 text-white"
       case "whatsapp":
-        return "bg-green-600 text-white"
+        return baseStyle + "bg-green-600 text-white"
       case "youtube":
-        return "bg-red-600 text-white"
+        return baseStyle + "bg-red-600 text-white"
       case "linkedin":
-        return "bg-blue-700 text-white"
+        return baseStyle + "bg-blue-700 text-white"
       default:
-        return "bg-gray-700 text-white"
+        return baseStyle + "bg-gray-700 text-white"
     }
   } else if (theme === "gradient") {
     switch (type) {
       case "instagram":
-        return "bg-white/20 backdrop-blur-sm text-white border border-white/30"
+        return baseStyle + "bg-white/20 backdrop-blur-sm text-white border border-white/30"
       case "website":
-        return "bg-white/20 backdrop-blur-sm text-white border border-white/30"
+        return baseStyle + "bg-white/20 backdrop-blur-sm text-white border border-white/30"
       case "whatsapp":
-        return "bg-white/20 backdrop-blur-sm text-white border border-white/30"
+        return baseStyle + "bg-white/20 backdrop-blur-sm text-white border border-white/30"
       case "youtube":
-        return "bg-white/20 backdrop-blur-sm text-white border border-white/30"
+        return baseStyle + "bg-white/20 backdrop-blur-sm text-white border border-white/30"
       case "linkedin":
-        return "bg-white/20 backdrop-blur-sm text-white border border-white/30"
+        return baseStyle + "bg-white/20 backdrop-blur-sm text-white border border-white/30"
       default:
-        return "bg-white/20 backdrop-blur-sm text-white border border-white/30"
+        return baseStyle + "bg-white/20 backdrop-blur-sm text-white border border-white/30"
     }
   } else {
     switch (type) {
       case "instagram":
-        return "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+        return baseStyle + "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
       case "website":
-        return "bg-primary text-primary-foreground"
+        return baseStyle + "bg-primary text-primary-foreground"
       case "whatsapp":
-        return "bg-green-500 text-white"
+        return baseStyle + "bg-green-500 text-white"
       case "youtube":
-        return "bg-red-500 text-white"
+        return baseStyle + "bg-red-500 text-white"
       case "linkedin":
-        return "bg-blue-700 text-white"
+        return baseStyle + "bg-blue-700 text-white"
       default:
-        return "bg-gray-100 text-gray-900"
+        return baseStyle + "bg-gray-100 text-gray-900"
     }
   }
 }
