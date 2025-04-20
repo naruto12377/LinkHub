@@ -1,13 +1,36 @@
+"use client"
+
 import type React from "react"
+
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { BarChart3, Home, LinkIcon, LogOut, Settings, User } from "lucide-react"
+import { BarChart3, Home, LinkIcon, LogOut, Settings, User, Shield } from "lucide-react"
+import { isAdmin, logout } from "@/app/actions/auth-actions"
 
 interface DashboardShellProps {
   children: React.ReactNode
 }
 
 export function DashboardShell({ children }: DashboardShellProps) {
+  const [isAdminUser, setIsAdminUser] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function checkAdminStatus() {
+      try {
+        const adminStatus = await isAdmin()
+        setIsAdminUser(adminStatus)
+      } catch (error) {
+        console.error("Error checking admin status:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    checkAdminStatus()
+  }, [])
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
@@ -21,12 +44,12 @@ export function DashboardShell({ children }: DashboardShellProps) {
               View Profile
             </Link>
           </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/login">
+          <form action={logout}>
+            <Button variant="outline" size="sm" type="submit">
               <LogOut className="mr-2 h-4 w-4" />
               Logout
-            </Link>
-          </Button>
+            </Button>
+          </form>
         </nav>
       </header>
       <div className="flex flex-1">
@@ -60,6 +83,15 @@ export function DashboardShell({ children }: DashboardShellProps) {
               <Settings className="h-4 w-4" />
               Settings
             </Link>
+            {isAdminUser && !loading && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                <Shield className="h-4 w-4" />
+                Admin
+              </Link>
+            )}
           </nav>
         </aside>
         <main className="flex-1 p-4 md:p-6">{children}</main>

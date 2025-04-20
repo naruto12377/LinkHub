@@ -30,14 +30,17 @@ export async function registerUser(
   displayName: string,
 ): Promise<User | null> {
   try {
-    // Check if user already exists
-    const existingUser = await kv.hget(`user:${username}`, "email")
-    if (existingUser) {
+    // Check if username already exists
+    const usernameExists = await kv.exists(`user:${username}`)
+    if (usernameExists) {
+      console.log(`Username ${username} already exists`)
       return null // Username already taken
     }
 
-    const emailExists = await kv.get(`email:${email}`)
+    // Check if email already exists
+    const emailExists = await kv.exists(`email:${email}`)
     if (emailExists) {
+      console.log(`Email ${email} already exists`)
       return null // Email already registered
     }
 
@@ -45,7 +48,7 @@ export async function registerUser(
     const hashedPassword = hashPassword(password)
 
     // Create user ID
-    const userId = `user_${Date.now()}`
+    const userId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
 
     // Create user object
     const user: User = {
@@ -70,6 +73,7 @@ export async function registerUser(
     // Add to users list
     await kv.sadd("users", username)
 
+    console.log(`User ${username} registered successfully`)
     return user
   } catch (error) {
     console.error("Registration error:", error)
@@ -91,26 +95,30 @@ export async function loginUser(usernameOrEmail: string, password: string): Prom
     // Check if login is with email
     if (usernameOrEmail.includes("@")) {
       const emailLookup = await kv.get(`email:${usernameOrEmail}`)
-      if (!emailLookup) return null
+      if (!emailLookup) {
+        console.log(`Email ${usernameOrEmail} not found`)
+        return null
+      }
       username = emailLookup as string
     }
 
     // Get user data
     const userData = await kv.hgetall(`user:${username}`)
-    if (!userData) return null
+    if (!userData) {
+      console.log(`User ${username} not found`)
+      return null
+    }
 
     // Verify password
     const hashedPassword = hashPassword(password)
     if (userData.password !== hashedPassword) {
+      console.log(`Invalid password for user ${username}`)
       return null
     }
 
-    // Create session
-    const sessionId = `session_${Date.now()}`
-    await kv.set(`session:${sessionId}`, username, { ex: 60 * 60 * 24 * 7 }) // 7 days expiry
-
     // Return user without password
     const { password: _, ...user } = userData
+    console.log(`User ${username} logged in successfully`)
     return user as User
   } catch (error) {
     console.error("Login error:", error)
@@ -126,11 +134,19 @@ export async function loginUser(usernameOrEmail: string, password: string): Prom
  */
 export async function getUserBySession(sessionId: string): Promise<User | null> {
   try {
+    if (!sessionId) return null
+
     const username = await kv.get(`session:${sessionId}`)
-    if (!username) return null
+    if (!username) {
+      console.log(`Invalid session: ${sessionId}`)
+      return null
+    }
 
     const userData = await kv.hgetall(`user:${username}`)
-    if (!userData) return null
+    if (!userData) {
+      console.log(`User not found for session: ${sessionId}`)
+      return null
+    }
 
     const { password: _, ...user } = userData
     return user as User
@@ -157,8 +173,9 @@ function hashPassword(password: string): string {
  * @returns Session ID
  */
 export async function createSession(username: string): Promise<string> {
-  const sessionId = `session_${Date.now()}`
+  const sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
   await kv.set(`session:${sessionId}`, username, { ex: 60 * 60 * 24 * 7 }) // 7 days expiry
+  console.log(`Session created for user ${username}: ${sessionId}`)
   return sessionId
 }
 
@@ -169,6 +186,7 @@ export async function createSession(username: string): Promise<string> {
  */
 export async function logoutUser(sessionId: string): Promise<void> {
   await kv.del(`session:${sessionId}`)
+  console.log(`Session invalidated: ${sessionId}`)
 }
 
 // Admin credentials - IMPORTANT: Change these in production!
@@ -181,29 +199,35 @@ export const ADMIN_EMAIL = "admin@linkhub.com"
  * Initialize the admin account if it doesn't exist
  */
 export async function initializeAdmin(): Promise<void> {
-  const adminExists = await kv.exists(`user:${ADMIN_USERNAME}`)
+  try {
+    const adminExists = await kv.exists(`user:${ADMIN_USERNAME}`)
 
-  if (!adminExists) {
-    const hashedPassword = hashPassword(ADMIN_PASSWORD)
+    if (!adminExists) {
+      const hashedPassword = hashPassword(ADMIN_PASSWORD)
 
-    const admin: User = {
-      id: "admin_1",
-      username: ADMIN_USERNAME,
-      email: ADMIN_EMAIL,
-      displayName: "Admin",
-      bio: "LinkHub Administrator",
-      isAdmin: true,
-      createdAt: Date.now(),
+      const admin: User = {
+        id: "admin_1",
+        username: ADMIN_USERNAME,
+        email: ADMIN_EMAIL,
+        displayName: "Admin",
+        bio: "LinkHub Administrator",
+        isAdmin: true,
+        createdAt: Date.now(),
+      }
+
+      await kv.hset(`user:${ADMIN_USERNAME}`, {
+        ...admin,
+        password: hashedPassword,
+      })
+
+      await kv.set(`email:${ADMIN_EMAIL}`, ADMIN_USERNAME)
+      await kv.sadd("users", ADMIN_USERNAME)
+
+      console.log("Admin account created successfully")
+    } else {
+      console.log("Admin account already exists")
     }
-
-    await kv.hset(`user:${ADMIN_USERNAME}`, {
-      ...admin,
-      password: hashedPassword,
-    })
-
-    await kv.set(`email:${ADMIN_EMAIL}`, ADMIN_USERNAME)
-    await kv.sadd("users", ADMIN_USERNAME)
-
-    console.log("Admin account created")
+  } catch (error) {
+    console.error("Error initializing admin:", error)
   }
 }

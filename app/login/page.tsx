@@ -23,6 +23,7 @@ export default function LoginPage() {
 
       if (result.error) {
         setError(result.error)
+        setIsLoading(false)
       } else {
         // Redirect to dashboard on successful login
         router.push("/dashboard")
@@ -30,7 +31,6 @@ export default function LoginPage() {
     } catch (err) {
       setError("An unexpected error occurred. Please try again.")
       console.error(err)
-    } finally {
       setIsLoading(false)
     }
   }
@@ -53,7 +53,13 @@ export default function LoginPage() {
           <form action={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="usernameOrEmail">Username or Email</Label>
-              <Input id="usernameOrEmail" name="usernameOrEmail" placeholder="username or email@example.com" required />
+              <Input
+                id="usernameOrEmail"
+                name="usernameOrEmail"
+                placeholder="username or email@example.com"
+                required
+                autoComplete="username"
+              />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -62,7 +68,7 @@ export default function LoginPage() {
                   Forgot your password?
                 </Link>
               </div>
-              <Input id="password" name="password" required type="password" />
+              <Input id="password" name="password" required type="password" autoComplete="current-password" />
             </div>
             <Button className="w-full" type="submit" disabled={isLoading}>
               {isLoading ? "Logging in..." : "Login"}

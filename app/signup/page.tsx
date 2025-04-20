@@ -23,6 +23,7 @@ export default function SignupPage() {
 
       if (result.error) {
         setError(result.error)
+        setIsLoading(false)
       } else {
         // Redirect to dashboard on successful registration
         router.push("/dashboard")
@@ -30,7 +31,6 @@ export default function SignupPage() {
     } catch (err) {
       setError("An unexpected error occurred. Please try again.")
       console.error(err)
-    } finally {
       setIsLoading(false)
     }
   }
@@ -53,20 +53,27 @@ export default function SignupPage() {
           <form action={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
-              <Input id="username" name="username" placeholder="johndoe" required />
+              <Input id="username" name="username" placeholder="johndoe" required autoComplete="username" />
               <p className="text-xs text-gray-500">Only letters, numbers, and underscores allowed</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="displayName">Display Name (optional)</Label>
-              <Input id="displayName" name="displayName" placeholder="John Doe" />
+              <Input id="displayName" name="displayName" placeholder="John Doe" autoComplete="name" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" placeholder="john@example.com" required type="email" />
+              <Input
+                id="email"
+                name="email"
+                placeholder="john@example.com"
+                required
+                type="email"
+                autoComplete="email"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" required type="password" minLength={6} />
+              <Input id="password" name="password" required type="password" minLength={6} autoComplete="new-password" />
               <p className="text-xs text-gray-500">Must be at least 6 characters</p>
             </div>
             <Button className="w-full" type="submit" disabled={isLoading}>
