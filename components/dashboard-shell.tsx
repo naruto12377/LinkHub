@@ -5,7 +5,7 @@ import type React from "react"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { BarChart3, Home, LinkIcon, LogOut, Settings, User, Shield } from "lucide-react"
+import { BarChart3, Home, LinkIcon, LogOut, Settings, User, Shield, Palette } from "lucide-react"
 import { isAdmin, logout } from "@/app/actions/auth-actions"
 
 interface DashboardShellProps {
@@ -75,6 +75,13 @@ export function DashboardShell({ children }: DashboardShellProps) {
             >
               <LinkIcon className="h-4 w-4" />
               Links
+            </Link>
+            <Link
+              href="/themes"
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              <Palette className="h-4 w-4" />
+              Themes
             </Link>
             <Link
               href="/dashboard/settings"

@@ -32,6 +32,7 @@ import Image from "next/image"
 import { getCurrentUser } from "@/app/actions/auth-actions"
 import { getUserLinks, addLink, updateUserLink, deleteUserLink, updateLinkPositions } from "@/app/actions/link-actions"
 import { getUserProfile, updateUserProfile, uploadUserProfileImage } from "@/app/actions/profile-actions"
+import { themeOptions, getThemeById, getButtonStyle } from "@/lib/themes"
 import type { User } from "@/lib/auth"
 import type { Link as LinkType } from "@/lib/links"
 import type { Profile } from "@/lib/profiles"
@@ -50,6 +51,7 @@ export default function EditorPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [selectedTheme, setSelectedTheme] = useState("default")
 
   useEffect(() => {
     async function loadData() {
@@ -72,6 +74,7 @@ export default function EditorPage() {
         const profileResult = await getUserProfile(userData.username)
         if (profileResult.success) {
           setProfile(profileResult.profile)
+          setSelectedTheme(profileResult.profile.theme || "default")
         }
       } catch (err) {
         console.error("Error loading editor data:", err)
@@ -246,6 +249,10 @@ export default function EditorPage() {
     }
   }
 
+  const handleThemeChange = (themeId: string) => {
+    setSelectedTheme(themeId)
+  }
+
   const getLinkIcon = (type) => {
     switch (type) {
       case "instagram":
@@ -273,6 +280,8 @@ export default function EditorPage() {
       </DashboardShell>
     )
   }
+
+  const currentTheme = getThemeById(selectedTheme)
 
   return (
     <DashboardShell>
@@ -472,35 +481,38 @@ export default function EditorPage() {
                     <h2 className="text-xl font-bold">Theme</h2>
                     <div className="space-y-2">
                       <Label htmlFor="theme">Profile Theme</Label>
-                      <Select name="theme" defaultValue={profile?.theme || "default"}>
+                      <Select name="theme" value={selectedTheme} onValueChange={handleThemeChange}>
                         <SelectTrigger id="theme">
                           <SelectValue placeholder="Select theme" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="default">Default</SelectItem>
-                          <SelectItem value="dark">Dark</SelectItem>
-                          <SelectItem value="gradient">Gradient</SelectItem>
+                          {themeOptions.map((theme) => (
+                            <SelectItem key={theme.id} value={theme.id}>
+                              {theme.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
+                      <p className="text-xs text-muted-foreground">{getThemeById(selectedTheme).description}</p>
                     </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="cursor-pointer rounded-md border p-4">
-                        <div className="h-20 rounded bg-white"></div>
-                        <p className="mt-2 text-center text-sm">Default</p>
-                      </div>
-                      <div className="cursor-pointer rounded-md border p-4">
-                        <div className="h-20 rounded bg-gray-900"></div>
-                        <p className="mt-2 text-center text-sm">Dark</p>
-                      </div>
-                      <div className="cursor-pointer rounded-md border p-4">
-                        <div className="h-20 rounded bg-gradient-to-r from-purple-500 to-pink-500"></div>
-                        <p className="mt-2 text-center text-sm">Gradient</p>
-                      </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {themeOptions.map((theme) => (
+                        <div
+                          key={theme.id}
+                          className={`cursor-pointer rounded-md border p-2 transition-all ${
+                            selectedTheme === theme.id ? "ring-2 ring-primary" : ""
+                          }`}
+                          onClick={() => handleThemeChange(theme.id)}
+                        >
+                          <div className={`h-20 rounded ${theme.backgroundCSS}`}></div>
+                          <p className="mt-2 text-center text-xs font-medium">{theme.name}</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
                   <div className="space-y-4">
-                    <h2 className="text-xl font-bold">Customization</h2>
+                    <h2 className="text-xl font-bold">Button Customization</h2>
                     <div className="space-y-2">
                       <Label htmlFor="buttonStyle">Button Style</Label>
                       <Select name="buttonStyle" defaultValue={profile?.customization?.buttonStyle || "default"}>
@@ -509,24 +521,65 @@ export default function EditorPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="default">Default</SelectItem>
-                          <SelectItem value="rounded">Rounded</SelectItem>
-                          <SelectItem value="pill">Pill</SelectItem>
+                          <SelectItem value="outline">Outline</SelectItem>
+                          <SelectItem value="solid">Solid</SelectItem>
                           <SelectItem value="shadow">Shadow</SelectItem>
+                          <SelectItem value="gradient">Gradient</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="fontFamily">Font</Label>
-                      <Select name="fontFamily" defaultValue={profile?.customization?.fontFamily || "default"}>
-                        <SelectTrigger id="fontFamily">
-                          <SelectValue placeholder="Select font" />
+                      <Label htmlFor="buttonShape">Button Shape</Label>
+                      <Select name="buttonShape" defaultValue={profile?.customization?.buttonShape || "rounded"}>
+                        <SelectTrigger id="buttonShape">
+                          <SelectValue placeholder="Select button shape" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="default">Default</SelectItem>
-                          <SelectItem value="serif">Serif</SelectItem>
-                          <SelectItem value="mono">Monospace</SelectItem>
+                          <SelectItem value="rounded">Rounded</SelectItem>
+                          <SelectItem value="pill">Pill</SelectItem>
+                          <SelectItem value="square">Square</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="showLinkIcons">Show Link Icons</Label>
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="showLinkIcons"
+                          name="showLinkIcons"
+                          defaultChecked={profile?.customization?.showLinkIcons !== false}
+                        />
+                        <Label htmlFor="showLinkIcons">Display icons next to links</Label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h2 className="text-xl font-bold">Layout Options</h2>
+                    <div className="space-y-2">
+                      <Label htmlFor="profileLayout">Profile Layout</Label>
+                      <Select name="profileLayout" defaultValue={profile?.customization?.profileLayout || "standard"}>
+                        <SelectTrigger id="profileLayout">
+                          <SelectValue placeholder="Select layout" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="standard">Standard</SelectItem>
+                          <SelectItem value="compact">Compact</SelectItem>
+                          <SelectItem value="centered">Centered</SelectItem>
+                          <SelectItem value="minimal">Minimal</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="showProfileStats">Show Profile Stats</Label>
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="showProfileStats"
+                          name="showProfileStats"
+                          defaultChecked={profile?.customization?.showProfileStats === true}
+                        />
+                        <Label htmlFor="showProfileStats">Display view count on profile</Label>
+                      </div>
                     </div>
                   </div>
 
@@ -543,17 +596,9 @@ export default function EditorPage() {
         <div className="sticky top-4 self-start">
           <h2 className="mb-4 text-xl font-bold">Preview</h2>
           <div className="relative h-[600px] w-[300px] overflow-hidden rounded-[40px] border-[8px] border-gray-900 bg-gray-900 shadow-xl">
-            <div
-              className={`absolute inset-0 overflow-auto ${
-                profile?.theme === "dark"
-                  ? "bg-gray-900 text-white"
-                  : profile?.theme === "gradient"
-                    ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
-                    : "bg-white"
-              }`}
-            >
-              <div className="flex flex-col items-center p-6 pt-10 text-center">
-                <div className="h-24 w-24 overflow-hidden rounded-full border-4 border-primary">
+            <div className={`absolute inset-0 overflow-auto ${currentTheme.backgroundCSS}`}>
+              <div className={`flex flex-col items-center p-6 pt-10 text-center ${currentTheme.colors.text}`}>
+                <div className={`h-24 w-24 overflow-hidden rounded-full border-4 ${currentTheme.colors.accent}`}>
                   <Image
                     src={imagePreview || profile?.profileImage || "/placeholder.svg?height=96&width=96"}
                     width={96}
@@ -562,10 +607,10 @@ export default function EditorPage() {
                     className="h-full w-full object-cover"
                   />
                 </div>
-                <h3 className="mt-4 text-xl font-bold">@{user?.username}</h3>
-                <p className={`text-sm ${profile?.theme === "default" ? "text-gray-500" : "text-gray-200"}`}>
-                  {profile?.bio || "Your bio here"}
-                </p>
+                <h3 className={`mt-4 text-xl font-bold ${currentTheme.fontFamily} ${currentTheme.colors.primary}`}>
+                  @{user?.username}
+                </h3>
+                <p className={`text-sm ${currentTheme.colors.secondary}`}>{profile?.bio || "Your bio here"}</p>
                 <div className="mt-6 grid w-full gap-4">
                   {links.length === 0 ? (
                     <div className="text-center text-sm text-muted-foreground">Add links to see them here</div>
@@ -576,10 +621,10 @@ export default function EditorPage() {
                         <div key={link.id}>
                           {link.isPublic ? (
                             <div
-                              className={`flex items-center justify-center rounded-md p-3 font-medium ${getLinkStyle(
+                              className={`flex items-center justify-center p-3 font-medium ${getButtonStyle(
+                                currentTheme,
                                 link.type,
-                                profile?.theme || "default",
-                                profile?.customization?.buttonStyle || "default",
+                                link.isPublic,
                               )}`}
                             >
                               {link.title}
@@ -587,15 +632,19 @@ export default function EditorPage() {
                           ) : (
                             <div
                               className={`flex items-center justify-center rounded-md ${
-                                profile?.theme === "default" ? "bg-gray-100" : "bg-gray-800"
+                                currentTheme.id === "default" ? "bg-gray-100 dark:bg-gray-800" : "bg-gray-800/50"
                               } p-3 font-medium`}
                             >
-                              <span className={profile?.theme === "default" ? "text-gray-500" : "text-gray-400"}>
+                              <span
+                                className={
+                                  currentTheme.id === "default" ? "text-gray-500 dark:text-gray-400" : "text-gray-400"
+                                }
+                              >
                                 {link.title}
                               </span>
                               <Lock
                                 className={`ml-2 h-4 w-4 ${
-                                  profile?.theme === "default" ? "text-gray-500" : "text-gray-400"
+                                  currentTheme.id === "default" ? "text-gray-500 dark:text-gray-400" : "text-gray-400"
                                 }`}
                               />
                             </div>
@@ -612,70 +661,4 @@ export default function EditorPage() {
       </div>
     </DashboardShell>
   )
-}
-
-function getLinkStyle(type: string, theme: string, buttonStyle: string): string {
-  let baseStyle = ""
-
-  // Button style
-  switch (buttonStyle) {
-    case "rounded":
-      baseStyle = "rounded-md "
-      break
-    case "pill":
-      baseStyle = "rounded-full "
-      break
-    case "shadow":
-      baseStyle = "rounded-md shadow-lg "
-      break
-    default:
-      baseStyle = "rounded-md "
-  }
-
-  if (theme === "dark") {
-    switch (type) {
-      case "instagram":
-        return baseStyle + "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
-      case "website":
-        return baseStyle + "bg-blue-600 text-white"
-      case "whatsapp":
-        return baseStyle + "bg-green-600 text-white"
-      case "youtube":
-        return baseStyle + "bg-red-600 text-white"
-      case "linkedin":
-        return baseStyle + "bg-blue-700 text-white"
-      default:
-        return baseStyle + "bg-gray-700 text-white"
-    }
-  } else if (theme === "gradient") {
-    switch (type) {
-      case "instagram":
-        return baseStyle + "bg-white/20 backdrop-blur-sm text-white border border-white/30"
-      case "website":
-        return baseStyle + "bg-white/20 backdrop-blur-sm text-white border border-white/30"
-      case "whatsapp":
-        return baseStyle + "bg-white/20 backdrop-blur-sm text-white border border-white/30"
-      case "youtube":
-        return baseStyle + "bg-white/20 backdrop-blur-sm text-white border border-white/30"
-      case "linkedin":
-        return baseStyle + "bg-white/20 backdrop-blur-sm text-white border border-white/30"
-      default:
-        return baseStyle + "bg-white/20 backdrop-blur-sm text-white border border-white/30"
-    }
-  } else {
-    switch (type) {
-      case "instagram":
-        return baseStyle + "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
-      case "website":
-        return baseStyle + "bg-primary text-primary-foreground"
-      case "whatsapp":
-        return baseStyle + "bg-green-500 text-white"
-      case "youtube":
-        return baseStyle + "bg-red-500 text-white"
-      case "linkedin":
-        return baseStyle + "bg-blue-700 text-white"
-      default:
-        return baseStyle + "bg-gray-100 text-gray-900"
-    }
-  }
 }

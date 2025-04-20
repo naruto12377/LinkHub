@@ -59,9 +59,9 @@
     "vaul": "^0.9.6",
     "zod": "^3.24.1",
     "@vercel/kv": "latest",
+    "crypto": "latest",
     "@vercel/blob": "latest",
-    "@hello-pangea/dnd": "latest",
-    "crypto": "latest"
+    "@hello-pangea/dnd": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

@@ -20,6 +20,13 @@ export interface Profile {
     textColor?: string
     fontFamily?: string
     buttonStyle?: string
+    buttonShape?: string
+    buttonAnimation?: string
+    profileLayout?: string
+    showLinkIcons?: boolean
+    showLinkDescriptions?: boolean
+    showProfileStats?: boolean
+    customCSS?: string
   }
   views: number
   updatedAt: number
@@ -51,7 +58,13 @@ export async function getProfile(username: string): Promise<Profile | null> {
       bio: (userData.bio as string) || "",
       theme: "default",
       profileImage: userData.profileImage as string,
-      customization: {},
+      customization: {
+        buttonStyle: "default",
+        buttonShape: "rounded",
+        profileLayout: "standard",
+        showLinkIcons: true,
+        showProfileStats: false,
+      },
       views: 0,
       updatedAt: Date.now(),
     }
@@ -84,6 +97,10 @@ export async function updateProfile(username: string, profileData: Partial<Profi
   const updatedProfile: Profile = {
     ...existingProfile,
     ...profileData,
+    customization: {
+      ...existingProfile.customization,
+      ...(profileData.customization || {}),
+    },
     updatedAt: Date.now(),
   }
 

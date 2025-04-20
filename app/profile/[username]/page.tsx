@@ -1,6 +1,13 @@
+"use client"
+
+import { getProfile } from "@/lib/profiles"
+import { getPublicLinksByUsername } from "@/lib/links"
+import { getThemeById, getButtonStyle } from "@/lib/themes"
 import { Card } from "@/components/ui/card"
 import { Lock } from "lucide-react"
 import Image from "next/image"
+import { trackProfileView } from "@/app/actions/profile-actions"
+import { trackLinkClick } from "@/app/actions/link-actions"
 
 interface ProfilePageProps {
   params: {
@@ -8,85 +15,61 @@ interface ProfilePageProps {
   }
 }
 
-export default function ProfilePage({ params }: ProfilePageProps) {
+export default async function ProfilePage({ params }: ProfilePageProps) {
   const { username } = params
 
-  // This would be fetched from a database in a real application
-  const profile = {
-    username,
-    displayName: "John Doe",
-    bio: "Digital Creator & Influencer",
-    links: [
-      {
-        id: 1,
-        title: "My Website",
-        url: "https://example.com",
-        type: "website",
-        isPublic: true,
-      },
-      {
-        id: 2,
-        title: "Instagram",
-        url: "https://instagram.com/username",
-        type: "instagram",
-        isPublic: true,
-      },
-      {
-        id: 3,
-        title: "WhatsApp Community",
-        url: "https://whatsapp.com/group/link",
-        type: "whatsapp",
-        isPublic: true,
-      },
-      {
-        id: 4,
-        title: "YouTube Channel",
-        url: "https://youtube.com/c/username",
-        type: "youtube",
-        isPublic: true,
-      },
-      {
-        id: 5,
-        title: "LinkedIn Profile",
-        url: "https://linkedin.com/in/username",
-        type: "linkedin",
-        isPublic: true,
-      },
-      {
-        id: 6,
-        title: "Premium Content",
-        url: "#",
-        type: "premium",
-        isPublic: false,
-      },
-    ],
+  // Get profile data
+  const profile = await getProfile(username)
+  if (!profile) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">Profile not found</h1>
+          <p className="text-gray-500 dark:text-gray-400">The profile you're looking for doesn't exist.</p>
+        </div>
+      </div>
+    )
   }
 
+  // Get public links
+  const links = await getPublicLinksByUsername(username)
+
+  // Track profile view (don't await to avoid blocking)
+  trackProfileView(username).catch(console.error)
+
+  // Get theme
+  const theme = getThemeById(profile.theme || "default")
+
   return (
-    <div className="flex min-h-screen flex-col items-center bg-gray-50 dark:bg-gray-900">
+    <div className={`flex min-h-screen flex-col items-center ${theme.backgroundCSS}`}>
       <div className="w-full max-w-md px-4 py-8">
-        <div className="flex flex-col items-center text-center">
-          <div className="h-24 w-24 overflow-hidden rounded-full border-4 border-primary">
+        <div className={`flex flex-col items-center text-center ${theme.colors.text}`}>
+          <div className={`h-24 w-24 overflow-hidden rounded-full border-4 ${theme.colors.accent}`}>
             <Image
-              src="/placeholder.svg?height=96&width=96"
+              src={profile.profileImage || "/placeholder.svg?height=96&width=96"}
               width={96}
               height={96}
               alt="Profile"
               className="h-full w-full object-cover"
             />
           </div>
-          <h1 className="mt-4 text-2xl font-bold">@{profile.username}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{profile.bio}</p>
+          <h1 className={`mt-4 text-2xl font-bold ${theme.fontFamily} ${theme.colors.primary}`}>@{profile.username}</h1>
+          <p className={`text-sm ${theme.colors.secondary}`}>{profile.bio}</p>
         </div>
         <div className="mt-8 grid gap-4">
-          {profile.links.map((link) => (
-            <Card key={link.id} className="overflow-hidden">
+          {links.map((link) => (
+            <Card key={link.id} className={`overflow-hidden ${theme.cardStyle}`}>
               {link.isPublic ? (
                 <a
                   href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`flex items-center justify-center p-3 font-medium ${getLinkStyle(link.type)}`}
+                  className={`flex items-center justify-center p-3 font-medium ${getButtonStyle(
+                    theme,
+                    link.type,
+                    link.isPublic,
+                  )}`}
+                  onClick={() => trackLinkClick(link.id)}
                 >
                   {link.title}
                 </a>
@@ -103,21 +86,4 @@ export default function ProfilePage({ params }: ProfilePageProps) {
       </div>
     </div>
   )
-}
-
-function getLinkStyle(type: string): string {
-  switch (type) {
-    case "instagram":
-      return "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
-    case "website":
-      return "bg-primary text-primary-foreground"
-    case "whatsapp":
-      return "bg-green-500 text-white"
-    case "youtube":
-      return "bg-red-500 text-white"
-    case "linkedin":
-      return "bg-blue-700 text-white"
-    default:
-      return "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
-  }
 }
