@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "LinkHub - Your Links, Your Way",
   description: "Create beautiful mobile-friendly landing pages that showcase all your important links in one place.",
-    generator: 'v0.dev'
+  generator: "v0.dev",
 }
 
 export default function RootLayout({

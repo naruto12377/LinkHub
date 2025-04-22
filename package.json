@@ -58,10 +58,10 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.6",
     "zod": "^3.24.1",
-    "crypto": "latest",
     "@vercel/kv": "latest",
-    "@vercel/blob": "latest",
-    "@hello-pangea/dnd": "latest"
+    "@hello-pangea/dnd": "latest",
+    "crypto": "latest",
+    "@vercel/blob": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",
