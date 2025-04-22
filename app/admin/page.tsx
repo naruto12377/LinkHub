@@ -9,6 +9,7 @@ import { DashboardShell } from "@/components/dashboard-shell"
 import { getCurrentUser, isAdmin } from "@/app/actions/auth-actions"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { getAllUsers, getSystemStats, fixRedisKeyStructure } from "@/lib/redis-utils"
 
 export default function AdminPage() {
   const router = useRouter()
@@ -16,6 +17,8 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null)
   const [users, setUsers] = useState<any[]>([])
   const [stats, setStats] = useState<any>({})
+  const [isFixing, setIsFixing] = useState(false)
+  const [fixSuccess, setFixSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     async function checkAdmin() {
@@ -48,22 +51,36 @@ export default function AdminPage() {
 
   async function fetchData() {
     try {
-      // In a real app, you would fetch this data from your API
-      // For now, we'll use mock data
-      setUsers([
-        { id: 1, username: "admin", email: "admin@linkhub.com", isAdmin: true, createdAt: new Date().toISOString() },
-        { id: 2, username: "user1", email: "user1@example.com", isAdmin: false, createdAt: new Date().toISOString() },
-      ])
+      // Get all users
+      const allUsers = await getAllUsers()
+      setUsers(allUsers)
 
-      setStats({
-        totalUsers: 2,
-        totalLinks: 5,
-        totalViews: 120,
-        totalClicks: 45,
-      })
+      // Get system stats
+      const systemStats = await getSystemStats()
+      setStats(systemStats)
     } catch (err) {
       console.error("Error fetching data:", err)
       setError("Failed to fetch admin data")
+    }
+  }
+
+  async function handleFixRedisStructure() {
+    try {
+      setIsFixing(true)
+      const success = await fixRedisKeyStructure()
+
+      if (success) {
+        setFixSuccess("Redis key structure fixed successfully")
+        // Refresh data
+        await fetchData()
+      } else {
+        setError("Failed to fix Redis key structure")
+      }
+    } catch (err) {
+      console.error("Error fixing Redis key structure:", err)
+      setError("Failed to fix Redis key structure")
+    } finally {
+      setIsFixing(false)
     }
   }
 
@@ -87,6 +104,12 @@ export default function AdminPage() {
       {error && (
         <Alert variant="destructive" className="my-4">
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {fixSuccess && (
+        <Alert className="my-4 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-900">
+          <AlertDescription className="text-green-800 dark:text-green-300">{fixSuccess}</AlertDescription>
         </Alert>
       )}
 
@@ -126,9 +149,14 @@ export default function AdminPage() {
       </div>
 
       <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Users</CardTitle>
-          <CardDescription>Manage user accounts</CardDescription>
+        <CardHeader className="flex justify-between items-center">
+          <div>
+            <CardTitle>Users</CardTitle>
+            <CardDescription>Manage user accounts</CardDescription>
+          </div>
+          <Button onClick={handleFixRedisStructure} disabled={isFixing}>
+            {isFixing ? "Fixing..." : "Fix Redis Structure"}
+          </Button>
         </CardHeader>
         <CardContent>
           <Table>
