@@ -189,7 +189,10 @@ export async function getProfileAnalytics(
 
   // Get views by day
   const startTime = Date.now() - days * 24 * 60 * 60 * 1000
-  const viewTimestamps = await kv.zrangebyscore(`profile:${username}:views`, startTime, "+inf")
+
+  // Use zrange instead of zrangebyscore
+  // Format: zrange(key, min, max, { byScore: true })
+  const viewTimestamps = await kv.zrange(`profile:${username}:views`, startTime, "+inf", { byScore: true })
 
   const viewsByDay: Record<string, number> = {}
 

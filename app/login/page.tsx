@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { login } from "@/app/actions/auth-actions"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Layout } from "lucide-react"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -39,7 +40,13 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col">
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-12">
         <div className="w-full max-w-sm space-y-6">
-          <div className="space-y-2 text-center">
+          <div className="flex flex-col items-center space-y-2 text-center">
+            <div className="flex items-center gap-2">
+              <div className="bg-orange-500 text-white p-1 rounded-md">
+                <Layout className="h-6 w-6" />
+              </div>
+              <span className="font-bold text-xl">LinkHub</span>
+            </div>
             <h1 className="text-3xl font-bold">Login</h1>
             <p className="text-gray-500 dark:text-gray-400">Enter your credentials to access your account</p>
           </div>
@@ -64,7 +71,7 @@ export default function LoginPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <Link className="text-sm underline" href="#">
+                <Link className="text-sm underline text-primary" href="#">
                   Forgot your password?
                 </Link>
               </div>
@@ -75,7 +82,7 @@ export default function LoginPage() {
             </Button>
             <div className="text-center text-sm">
               Don&apos;t have an account?{" "}
-              <Link className="underline" href="/signup">
+              <Link className="underline text-primary" href="/signup">
                 Sign up
               </Link>
             </div>
